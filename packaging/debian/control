@@ -1,0 +1,14 @@
+Source: ooboundary
+Section: utils
+Priority: optional
+Maintainer: openOODA-tools <ops@openooda.org>
+Standards-Version: 4.6.2
+Build-Depends: debhelper-compat (= 13)
+
+Package: ooboundary
+Architecture: amd64
+Depends: libc6
+Description: EGRESS BOUNDARY
+ Hardware enforced kernel netfilter hook restricting agent sockets to allowed IPs.
+ Capability-bounded openOODA utility with zero ambient authority,
+ oote theme palettes, and native Model Context Protocol (MCP) surface.
