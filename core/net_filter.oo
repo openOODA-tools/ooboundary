@@ -1,0 +1,90 @@
+// # ooboundary Netfilter and Directives Generator
+//
+// Logline: Synthesizes systemd drop-ins and nftables chains for egress traffic confinement.
+//
+// Setup: Generates declarative network confinement rules for sovereign agents.
+//
+// Beats:
+//   1. Build systemd IPAddressDeny and IPAddressAllow drop-in blocks.
+//   2. Build nftables kernel egress filtering tables and chains.
+//   3. Audit egress configurations against data exfiltration baselines.
+
+import "core/boundary_rule.oo";
+
+fn contains_sub(s: String, sub: String) -> Bool {
+    let n: Int = chars_len(s);
+    let sub_n: Int = chars_len(sub);
+    if sub_n == 0 { return true; }
+    if sub_n > n { return false; }
+    let mut i: Int = 0;
+    while i <= n - sub_n {
+        if str_slice(s, i, i + sub_n) == sub {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn generate_systemd_egress(policy: BoundaryPolicy, allowed_ips: String) -> String {
+    let mut out: String = "[Service]\n";
+    out = out + "IPAddressDeny=any\n";
+
+    let mut allow_list: String = "";
+    if policy.allow_loopback {
+        allow_list = "127.0.0.1/8 ::1";
+    }
+    if chars_len(allowed_ips) > 0 {
+        if chars_len(allow_list) > 0 {
+            allow_list = allow_list + " " + allowed_ips;
+        } else {
+            allow_list = allowed_ips;
+        }
+    }
+
+    if chars_len(allow_list) > 0 {
+        out = out + "IPAddressAllow=" + allow_list + "\n";
+    }
+    out = out + "SocketBindDeny=any\n";
+    out = out + "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX\n";
+    return out;
+}
+
+pub fn generate_nftables_egress(policy: BoundaryPolicy, allowed_ips: String, allowed_ports: String) -> String {
+    let mut out: String = "table inet ooboundary {\n";
+    out = out + "  chain egress {\n";
+    out = out + "    type filter hook output priority 0; policy " + policy.default_action + ";\n";
+    out = out + "    ct state established,related accept\n";
+    if policy.allow_loopback {
+        out = out + "    oif \"lo\" accept\n";
+    }
+    if chars_len(allowed_ips) > 0 {
+        out = out + "    ip daddr { " + allowed_ips + " } accept\n";
+    }
+    if chars_len(allowed_ports) > 0 {
+        out = out + "    tcp dport { " + allowed_ports + " } accept\n";
+    }
+    out = out + "  }\n";
+    out = out + "}\n";
+    return out;
+}
+
+pub fn audit_egress_policy(policy: BoundaryPolicy, allowed_ips: String) -> String {
+    let mut issues: String = "";
+    let mut count: Int = 0;
+
+    if contains_sub(allowed_ips, "0.0.0.0/0") {
+        issues = issues + "- CRITICAL: Wildcard 0.0.0.0/0 permits unrestricted internet egress\n";
+        count = count + 1;
+    }
+
+    if policy.default_action != "drop" && policy.default_action != "reject" {
+        issues = issues + "- CRITICAL: Default egress action must be drop or reject\n";
+        count = count + 1;
+    }
+
+    if count == 0 {
+        return "PASS: Egress boundary adheres to negative-trust isolation standards (score: 100/100)";
+    }
+    return "FAIL (" + to_string(count) + " issues found):\n" + issues;
+}

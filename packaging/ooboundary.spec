@@ -1,5 +1,5 @@
 Name:           ooboundary
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Hardware enforced kernel netfilter hook restricting agent sockets to allowed IPs.
 License:        ASL 2.0

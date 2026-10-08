@@ -1,0 +1,19 @@
+// # ooboundary Render Module Anchor
+//
+// Logline: Integrates rendering components and ANSI output formatters for ooboundary.
+//
+// Setup: Exports theme renderers and JSON serialization endpoints.
+//
+// Beats:
+//   1. Expose terminal panel renderers.
+//   2. Expose JSON telemetry and audit formatters.
+//   3. Provide render subsystem health verification.
+
+import "core/boundary_rule.oo";
+import "render/boundary_theme.oo";
+
+pub fn verify_render_subsystem() -> Bool {
+    let p: BoundaryPolicy = profile_strict();
+    let j: String = render_boundary_json(p, "1.1.1.1/32", "443");
+    return str_starts_with(j, "{\"policy\":\"strict\"");
+}

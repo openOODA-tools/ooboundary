@@ -1,7 +1,7 @@
 # Maintainer: openOODA-tools <ops@openooda.org>
 pkgname=ooboundary-bin
 _pkgname=ooboundary
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Hardware enforced kernel netfilter hook restricting agent sockets to allowed IPs."
 arch=('x86_64')

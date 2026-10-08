@@ -1,0 +1,90 @@
+// # ooboundary Command Line Options Parser
+//
+// Logline: Decodes CLI flags, egress network parameters, and operational modes.
+//
+// Setup: Parses arguments into a structured BoundaryOpts configuration model.
+//
+// Beats:
+//   1. Define BoundaryOpts parameter structure.
+//   2. Parse allowed IP, CIDR, and port arguments.
+//   3. Dispatch operational modes for help, version, audit, and MCP.
+//   4. Normalize destination lists.
+
+pub type BoundaryOpts = struct {
+    show_help: Bool,
+    show_version: Bool,
+    mcp_mode: Bool,
+    json_mode: Bool,
+    audit_mode: Bool,
+    color_mode: Bool,
+    profile: String,
+    allowed_ips: String,
+    allowed_ports: String,
+    format: String
+};
+
+pub fn parse_opts(args: List[String]) -> BoundaryOpts {
+    let mut opt: BoundaryOpts = BoundaryOpts {
+        show_help: false,
+        show_version: false,
+        mcp_mode: false,
+        json_mode: false,
+        audit_mode: false,
+        color_mode: true,
+        profile: "strict",
+        allowed_ips: "",
+        allowed_ports: "",
+        format: "full"
+    };
+
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+
+    while i < n {
+        let a: String = list_get(args, i);
+        if a == "-h" || a == "--help" {
+            opt.show_help = true;
+        } else if a == "-v" || a == "--version" {
+            opt.show_version = true;
+        } else if a == "--mcp" {
+            opt.mcp_mode = true;
+        } else if a == "--json" {
+            opt.json_mode = true;
+        } else if a == "--audit" {
+            opt.audit_mode = true;
+        } else if (a == "-P" || a == "--profile") && i + 1 < n {
+            i = i + 1;
+            opt.profile = list_get(args, i);
+        } else if (a == "-a" || a == "--allow") && i + 1 < n {
+            i = i + 1;
+            let ip: String = list_get(args, i);
+            if chars_len(opt.allowed_ips) > 0 {
+                opt.allowed_ips = opt.allowed_ips + " " + ip;
+            } else {
+                opt.allowed_ips = ip;
+            }
+        } else if (a == "-p" || a == "--port") && i + 1 < n {
+            i = i + 1;
+            let port_str: String = list_get(args, i);
+            if chars_len(opt.allowed_ports) > 0 {
+                opt.allowed_ports = opt.allowed_ports + " " + port_str;
+            } else {
+                opt.allowed_ports = port_str;
+            }
+        } else if a == "--format" && i + 1 < n {
+            i = i + 1;
+            opt.format = list_get(args, i);
+        } else if a == "--color" && i + 1 < n {
+            i = i + 1;
+            if list_get(args, i) == "never" { opt.color_mode = false; }
+        } else if !str_starts_with(a, "-") {
+            if chars_len(opt.allowed_ips) > 0 {
+                opt.allowed_ips = opt.allowed_ips + " " + a;
+            } else {
+                opt.allowed_ips = a;
+            }
+        }
+        i = i + 1;
+    }
+    return opt;
+}

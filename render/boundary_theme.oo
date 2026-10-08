@@ -1,0 +1,82 @@
+// # ooboundary Theme and Terminal Formatter
+//
+// Logline: Formats egress boundary cards, directives, and JSON telemetry with ANSI palettes.
+//
+// Setup: Bridges core network filtering models to human and machine renderers.
+//
+// Beats:
+//   1. Generate ANSI color codes and formatting tags.
+//   2. Render human-readable egress boundary summary cards.
+//   3. Serialize network confinement directives into JSON Lines telemetry.
+//   4. Serialize preset catalogs and security audit reports.
+
+import "core/boundary_rule.oo";
+import "core/net_filter.oo";
+
+fn esc() -> String {
+    return bytes_to_str(bytes_push(bytes_new(), 27));
+}
+
+pub fn render_boundary_panel(policy: BoundaryPolicy, allowed_ips: String, allowed_ports: String, color: Bool) -> String {
+    let e: String = esc();
+    let c_cyan: String = if color { e + "[38;5;51m" } else { "" };
+    let c_green: String = if color { e + "[38;5;82m" } else { "" };
+    let c_yellow: String = if color { e + "[38;5;220m" } else { "" };
+    let c_dim: String = if color { e + "[38;5;242m" } else { "" };
+    let c_bold: String = if color { e + "[1m" } else { "" };
+    let c_rst: String = if color { e + "[0m" } else { "" };
+
+    let sys_dir: String = generate_systemd_egress(policy, allowed_ips);
+    let nft_rule: String = generate_nftables_egress(policy, allowed_ips, allowed_ports);
+
+    let mut out: String = "";
+    out = out + c_dim + "================================================================================" + c_rst + "\n";
+    out = out + "              " + c_cyan + c_bold + "ooboundary: Sovereign EGRESS BOUNDARY" + c_rst + "\n";
+    out = out + c_dim + "================================================================================" + c_rst + "\n";
+    out = out + "  Policy Profile:     " + c_green + c_bold + policy.name + c_rst + "\n";
+    out = out + "  Default Action:     " + c_yellow + policy.default_action + c_rst + "\n";
+    out = out + "  Loopback Allowed:   " + if policy.allow_loopback { c_green + "yes (127.0.0.1/8, ::1)" + c_rst } else { c_dim + "no (full isolation)" + c_rst } + "\n";
+    out = out + "  Allowed CIDRs:      " + if chars_len(allowed_ips) > 0 { c_yellow + allowed_ips + c_rst } else { c_dim + "none (zero outbound internet)" + c_rst } + "\n";
+    out = out + "  Allowed Ports:      " + if chars_len(allowed_ports) > 0 { c_yellow + allowed_ports + c_rst } else { c_dim + "all permitted IPs" + c_rst } + "\n";
+    out = out + c_dim + "--------------------------------------------------------------------------------" + c_rst + "\n";
+    out = out + "  " + c_bold + "Systemd Drop-In [Service] Directives:" + c_rst + "\n";
+    out = out + c_cyan + sys_dir + c_rst;
+    out = out + c_dim + "--------------------------------------------------------------------------------" + c_rst + "\n";
+    out = out + "  " + c_bold + "Kernel Nftables Ruleset:" + c_rst + "\n";
+    out = out + c_cyan + nft_rule + c_rst;
+    out = out + c_dim + "================================================================================" + c_rst + "\n";
+    return out;
+}
+
+pub fn render_boundary_json(policy: BoundaryPolicy, allowed_ips: String, allowed_ports: String) -> String {
+    let sys_dir: String = generate_systemd_egress(policy, allowed_ips);
+    let nft_rule: String = generate_nftables_egress(policy, allowed_ips, allowed_ports);
+    return "{\"policy\":\"" + policy.name + "\""
+        + ",\"default_action\":\"" + policy.default_action + "\""
+        + ",\"allow_loopback\":" + if policy.allow_loopback { "true" } else { "false" }
+        + ",\"allowed_ips\":\"" + allowed_ips + "\""
+        + ",\"allowed_ports\":\"" + allowed_ports + "\""
+        + ",\"systemd_directives\":\"" + sys_dir + "\""
+        + ",\"nftables_ruleset\":\"" + nft_rule + "\""
+        + "}\n";
+}
+
+pub fn render_audit_json(policy: BoundaryPolicy, allowed_ips: String) -> String {
+    let rep: String = audit_egress_policy(policy, allowed_ips);
+    let is_pass: Bool = str_starts_with(rep, "PASS");
+    return "{\"policy\":\"" + policy.name + "\""
+        + ",\"status\":\"" + if is_pass { "PASS" } else { "FAIL" } + "\""
+        + ",\"valid\":" + if is_pass { "true" } else { "false" }
+        + "}\n";
+}
+
+pub fn render_profiles_json() -> String {
+    let p1: BoundaryPolicy = profile_isolated();
+    let p2: BoundaryPolicy = profile_local();
+    let p3: BoundaryPolicy = profile_strict();
+    return "{\"profiles\":["
+        + "{\"name\":\"" + p1.name + "\",\"default_action\":\"" + p1.default_action + "\",\"allow_loopback\":false},"
+        + "{\"name\":\"" + p2.name + "\",\"default_action\":\"" + p2.default_action + "\",\"allow_loopback\":true},"
+        + "{\"name\":\"" + p3.name + "\",\"default_action\":\"" + p3.default_action + "\",\"allow_loopback\":true}"
+        + "]}\n";
+}

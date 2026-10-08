@@ -1,0 +1,101 @@
+// # ooboundary Model Context Protocol Stdio Server
+//
+// Logline: Dispatches JSON-RPC 2.0 streaming tools for AI agents managing egress socket boundaries.
+//
+// Setup: Bridges stdio frames to network filters and negative-trust security auditors.
+//
+// Beats:
+//   1. Handle MCP initialize and tools/list requests.
+//   2. Route boundary_profile, boundary_generate, boundary_audit, and boundary_stats tool calls.
+//   3. Stream line-delimited JSON-RPC 2.0 responses.
+
+import "core/boundary_rule.oo";
+import "render/boundary_theme.oo";
+import "ipc/json_field.oo";
+
+fn handle_tools_list(id_val: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"result\":{\"tools\":["
+        + "{\"name\":\"boundary_profile\",\"description\":\"List available egress boundary profiles (isolated, local, strict)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},"
+        + "{\"name\":\"boundary_generate\",\"description\":\"Generate systemd drop-in directives and nftables rules for allowed destinations\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"profile\":{\"type\":\"string\"},\"allowed_ips\":{\"type\":\"string\"},\"allowed_ports\":{\"type\":\"string\"}}}},"
+        + "{\"name\":\"boundary_audit\",\"description\":\"Audit egress network boundary against exfiltration risks\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"allowed_ips\":{\"type\":\"string\"},\"policy\":{\"type\":\"string\"}}}},"
+        + "{\"name\":\"boundary_stats\",\"description\":\"Query ooboundary version and socket confinement boundaries\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}"
+        + "]}}";
+}
+
+fn handle_tool_call(id_val: String, params: String) -> String {
+    let tool_name: String = json_get_string(params, "name");
+    let args: String = json_get_field(params, "arguments");
+
+    if tool_name == "boundary_profile" {
+        let text: String = render_profiles_json();
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(text) + "\"}]}}";
+    }
+
+    if tool_name == "boundary_generate" {
+        let prof_name: String = json_get_string(args, "profile");
+        let ips: String = json_get_string(args, "allowed_ips");
+        let ports: String = json_get_string(args, "allowed_ports");
+        let policy: BoundaryPolicy = if chars_len(prof_name) > 0 { find_policy(prof_name) } else { profile_strict() };
+
+        let text: String = render_boundary_json(policy, ips, ports);
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(text) + "\"}]}}";
+    }
+
+    if tool_name == "boundary_audit" {
+        let ips: String = json_get_string(args, "allowed_ips");
+        let prof_name: String = json_get_string(args, "policy");
+        let policy: BoundaryPolicy = if chars_len(prof_name) > 0 { find_policy(prof_name) } else { profile_strict() };
+
+        let text: String = render_audit_json(policy, ips);
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(text) + "\"}]}}";
+    }
+
+    if tool_name == "boundary_stats" {
+        let text: String = "{\"name\":\"ooboundary\",\"version\":\"0.2.0\",\"architecture\":\"x86_64\",\"capabilities\":[\"&FsReadCap\",\"&ProcessCap\",\"&EnvCap\",\"&McpCap\"],\"systemd_network_confinement\":true,\"nftables_support\":true}";
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape_string(text) + "\"}]}}";
+    }
+
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"error\":{\"code\":-32601,\"message\":\"Unknown tool: " + tool_name + "\"}}";
+}
+
+pub fn handle_mcp_message(line: String) -> String {
+    let method: String = json_get_string(line, "method");
+    let raw_id: String = json_get_field(line, "id");
+    let id_val: String = if chars_len(raw_id) > 0 { raw_id } else { "null" };
+
+    if method == "initialize" {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"ooboundary\",\"version\":\"0.2.0\"}}}";
+    }
+    if method == "notifications/initialized" {
+        return "";
+    }
+    if method == "tools/list" {
+        return handle_tools_list(id_val);
+    }
+    if method == "tools/call" {
+        let params: String = json_get_field(line, "params");
+        return handle_tool_call(id_val, params);
+    }
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_val + ",\"error\":{\"code\":-32600,\"message\":\"Unsupported method: " + method + "\"}}";
+}
+
+pub fn run_mcp_server(fs: &FsReadCap) {
+    let mut running: Bool = true;
+    while running {
+        let line_res: Result[String, String] = oo_read_stdin_chunk(fs, 8192);
+        if !line_res.is_ok() {
+            running = false;
+        } else {
+            let line: String = match line_res { Ok(s) => s, Err(_) => "" };
+            let trimmed: String = str_trim(line);
+            if chars_len(trimmed) == 0 {
+                running = false;
+            } else {
+                let resp: String = handle_mcp_message(trimmed);
+                if chars_len(resp) > 0 {
+                    println(resp);
+                }
+            }
+        }
+    }
+}

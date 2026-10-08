@@ -4,7 +4,7 @@
 # "Removes ooboundary binary, package installations, and cache."
 #
 # Usage:
-#   curl -fsSL https://openooda-tooboundary.github.io/ooboundary/uninstall.sh | bash
+#   curl -fsSL https://openooda-tools.github.io/ooboundary/uninstall.sh | bash
 #   or: ./uninstall.sh [options]
 #
 # Options:

@@ -1,0 +1,19 @@
+// # ooboundary Core Module Anchor
+//
+// Logline: Integrates rule definitions and kernel netfilter generators for ooboundary.
+//
+// Setup: Bridges policy models and systemd network confinement generators.
+//
+// Beats:
+//   1. Expose boundary presets and structure definitions.
+//   2. Expose systemd and nftables egress ruleset generators.
+//   3. Provide core subsystem health verification predicate.
+
+import "core/boundary_rule.oo";
+import "core/net_filter.oo";
+
+pub fn verify_core_subsystem() -> Bool {
+    let p: BoundaryPolicy = profile_strict();
+    let s: String = audit_egress_policy(p, "1.1.1.1/32");
+    return str_starts_with(s, "PASS");
+}

@@ -6,47 +6,79 @@
 //
 // Beats:
 //   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded ooboundary operations.
-//   3. Format and output structured results to standard output.
+//   2. Derive active egress boundary policies and allowed destination lists.
+//   3. Dispatch audit, JSON telemetry, systemd drop-in, or terminal summary output.
+
+import "core/boundary_rule.oo";
+import "core/net_filter.oo";
+import "render/boundary_theme.oo";
+import "ipc/boundary_opts.oo";
+import "ipc/mcp_serve.oo";
 
 fn render_help() -> String {
-    return "ooboundary 0.1.0 (openOODA sovereign network & egress)\n"
-        + "usage: ooboundary [options] [ARGUMENTS]...\n\n"
+    return "ooboundary 0.2.0 (openOODA sovereign egress boundary)\n"
+        + "usage: ooboundary [options] [ALLOWED_IP_OR_CIDR...]\n\n"
         + "Hardware enforced kernel netfilter hook restricting agent sockets to allowed IPs.\n\n"
         + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
+        + "  -P, --profile <NAME>   preset profile: isolated, local, strict [default: strict]\n"
+        + "  -a, --allow <IP/CIDR>  permit outbound traffic to destination IP or CIDR block\n"
+        + "  -p, --port <PORT>      permit outbound traffic to destination port\n"
+        + "      --format <MODE>    output format: full, systemd, nftables [default: full]\n"
+        + "      --audit            audit egress boundary against negative-trust baselines\n"
+        + "      --json             output formatted as JSON Lines\n"
+        + "      --color <WHEN>     colorize output: auto, always, never [default: auto]\n"
+        + "      --mcp              run as Model Context Protocol stdio server\n"
+        + "  -h, --help             display this help and exit\n"
+        + "  -v, --version          output version information and exit\n";
 }
 
-fn render_version() -> String {
-    return "ooboundary 0.1.0 (openOODA sovereign network & egress)\n";
-}
+pub fn main(
+    fs: &FsReadCap,
+    proc_cap: &ProcessCap,
+    env: &EnvCap,
+    args: List[String]
+) -> Result[Int, String] {
+    let opt: BoundaryOpts = parse_opts(args);
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
-    let mut i: Int = 0;
-
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
-        }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"ooboundary\"}}\n");
-            return 0;
-        }
-        i = i + 1;
+    if opt.show_help {
+        print(render_help());
+        return Ok(0);
+    }
+    if opt.show_version {
+        println("ooboundary 0.2.0 (openOODA sovereign egress boundary)");
+        return Ok(0);
+    }
+    if opt.mcp_mode {
+        run_mcp_server(fs);
+        return Ok(0);
     }
 
-    print("ooboundary: sovereign capability-bounded utility ready\n");
-    return 0;
+    let policy: BoundaryPolicy = find_policy(opt.profile);
+
+    if opt.audit_mode {
+        if opt.json_mode {
+            print(render_audit_json(policy, opt.allowed_ips));
+        } else {
+            print(audit_egress_policy(policy, opt.allowed_ips) + "\n");
+        }
+        return Ok(0);
+    }
+
+    if opt.json_mode {
+        print(render_boundary_json(policy, opt.allowed_ips, opt.allowed_ports));
+        return Ok(0);
+    }
+
+    if opt.format == "systemd" {
+        print(generate_systemd_egress(policy, opt.allowed_ips));
+        return Ok(0);
+    }
+
+    if opt.format == "nftables" {
+        print(generate_nftables_egress(policy, opt.allowed_ips, opt.allowed_ports));
+        return Ok(0);
+    }
+
+    print(render_boundary_panel(policy, opt.allowed_ips, opt.allowed_ports, opt.color_mode));
+    return Ok(0);
 }

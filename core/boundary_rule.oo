@@ -1,0 +1,58 @@
+// # ooboundary Policy and Rule Definitions
+//
+// Logline: Data models and presets for egress socket boundaries and network filters.
+//
+// Setup: Strongly typed definitions for network egress confinement rules.
+//
+// Beats:
+//   1. Declare BoundaryRule and BoundaryPolicy data representations.
+//   2. Provide standard profiles: isolated, local, and strict.
+//   3. Dispatch named profile lookups and fallback defaults.
+
+pub type BoundaryRule = struct {
+    target: String,
+    port: Int,
+    protocol: String,
+    action: String
+};
+
+pub type BoundaryPolicy = struct {
+    name: String,
+    default_action: String,
+    log_denied: Bool,
+    allow_loopback: Bool
+};
+
+pub fn profile_isolated() -> BoundaryPolicy {
+    return BoundaryPolicy {
+        name: "isolated",
+        default_action: "drop",
+        log_denied: true,
+        allow_loopback: false
+    };
+}
+
+pub fn profile_local() -> BoundaryPolicy {
+    return BoundaryPolicy {
+        name: "local",
+        default_action: "drop",
+        log_denied: true,
+        allow_loopback: true
+    };
+}
+
+pub fn profile_strict() -> BoundaryPolicy {
+    return BoundaryPolicy {
+        name: "strict",
+        default_action: "drop",
+        log_denied: true,
+        allow_loopback: true
+    };
+}
+
+pub fn find_policy(name: String) -> BoundaryPolicy {
+    if name == "isolated" { return profile_isolated(); }
+    if name == "local" { return profile_local(); }
+    if name == "strict" { return profile_strict(); }
+    return profile_strict();
+}
